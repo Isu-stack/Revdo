@@ -16,6 +16,10 @@ const adminPassword = process.env.ADMIN_PASSWORD || (isProduction ? "" : "admin1
 const sessionSecret = process.env.SESSION_SECRET || (isProduction ? "" : crypto.randomBytes(32).toString("hex"));
 const sessions = new Map();
 const loginAttempts = new Map();
+const normalizeIp = value => value.startsWith("::ffff:") ? value.slice(7) : value;
+const trustedProxyIps = new Set((process.env.TRUSTED_PROXY_IPS || "").split(",").map(value => normalizeIp(value.trim())).filter(Boolean));
+const supportedRoutes = new Set(["home", "work", "services", "studio", "contact"]);
+const maxLoginAttemptEntries = 5000;
 
 const types = {
   ".html": "text/html; charset=utf-8",
@@ -29,9 +33,17 @@ const types = {
   ".jpeg": "image/jpeg",
   ".ico": "image/x-icon"
 };
+const publicAssetExtensions = new Set([".svg", ".webp", ".png", ".jpg", ".jpeg", ".ico"]);
 
 function send(res, status, body, headers = {}) {
-  res.writeHead(status, { "Content-Type": "text/plain; charset=utf-8", ...headers });
+  res.writeHead(status, {
+    "Content-Type": "text/plain; charset=utf-8",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Content-Security-Policy": "frame-ancestors 'none'; base-uri 'self'; object-src 'none'",
+    ...headers
+  });
   res.end(body);
 }
 
@@ -61,8 +73,12 @@ function parseCookies(req) {
   const header = req.headers.cookie || "";
   return Object.fromEntries(header.split(";").map(v => v.trim()).filter(Boolean).map(v => {
     const index = v.indexOf("=");
-    return [decodeURIComponent(v.slice(0, index)), decodeURIComponent(v.slice(index + 1))];
-  }));
+    try {
+      return [decodeURIComponent(v.slice(0, index)), decodeURIComponent(v.slice(index + 1))];
+    } catch {
+      return null;
+    }
+  }).filter(Boolean));
 }
 
 function sign(value) {
@@ -80,7 +96,7 @@ function getSession(req) {
   const token = parseCookies(req).revdo_session;
   if (!token) return null;
   const [id, signature] = token.split(".");
-  if (!id || !signature || sign(id) !== signature) return null;
+  if (!id || !signature || !safeEqual(sign(id), signature)) return null;
   const session = sessions.get(id);
   if (!session) return null;
   const maxAge = 1000 * 60 * 60 * 12;
@@ -92,9 +108,11 @@ function getSession(req) {
 }
 
 function clientIp(req) {
+  const remoteAddress = normalizeIp(req.socket.remoteAddress || "unknown");
+  if (!trustedProxyIps.has(remoteAddress)) return remoteAddress;
   const forwarded = req.headers["x-forwarded-for"];
   if (typeof forwarded === "string" && forwarded.trim()) return forwarded.split(",")[0].trim();
-  return req.socket.remoteAddress || "unknown";
+  return remoteAddress;
 }
 
 function isRateLimited(req) {
@@ -102,9 +120,10 @@ function isRateLimited(req) {
   const now = Date.now();
   const windowMs = 10 * 60 * 1000;
   const maxFailures = 5;
-  const entry = loginAttempts.get(key) || { count: 0, firstAt: now };
+  const entry = loginAttempts.get(key);
+  if (!entry) return false;
   if (now - entry.firstAt > windowMs) {
-    loginAttempts.set(key, { count: 0, firstAt: now });
+    loginAttempts.delete(key);
     return false;
   }
   return entry.count >= maxFailures;
@@ -115,12 +134,28 @@ function recordLoginFailure(req) {
   const now = Date.now();
   const entry = loginAttempts.get(key) || { count: 0, firstAt: now };
   if (now - entry.firstAt > 10 * 60 * 1000) {
-    loginAttempts.set(key, { count: 1, firstAt: now });
-    return;
+    entry.count = 0;
+    entry.firstAt = now;
   }
   entry.count += 1;
+  if (!loginAttempts.has(key) && loginAttempts.size >= maxLoginAttemptEntries) {
+    const oldestKey = loginAttempts.keys().next().value;
+    if (oldestKey !== undefined) loginAttempts.delete(oldestKey);
+  }
   loginAttempts.set(key, entry);
 }
+
+setInterval(() => {
+  const now = Date.now();
+  const attemptWindowMs = 10 * 60 * 1000;
+  const sessionLifetimeMs = 12 * 60 * 60 * 1000;
+  for (const [key, attempt] of loginAttempts) {
+    if (now - attempt.firstAt > attemptWindowMs) loginAttempts.delete(key);
+  }
+  for (const [id, session] of sessions) {
+    if (now - session.createdAt > sessionLifetimeMs) sessions.delete(id);
+  }
+}, 60 * 1000).unref();
 
 function clearLoginFailures(req) {
   loginAttempts.delete(clientIp(req));
@@ -147,6 +182,25 @@ function safeJsonParse(buffer) {
   }
 }
 
+function isSafeAssetPath(value) {
+  return value === "" || (typeof value === "string" && /^\/assets\/[A-Za-z0-9][A-Za-z0-9._-]*\.(?:svg|webp|png|jpe?g)$/i.test(value));
+}
+
+function isSafeFooterHref(value) {
+  if (typeof value !== "string" || value !== value.trim()) return false;
+  if (value.startsWith("#")) return supportedRoutes.has(value.slice(1));
+  if (/^tel:\+?[0-9(). -]+$/i.test(value)) return true;
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  if (url.protocol === "https:") return Boolean(url.hostname) && !url.username && !url.password;
+  if (url.protocol === "mailto:") return /^[^@\s?]+@[^@\s?]+\.[^@\s?]+$/.test(url.pathname);
+  return false;
+}
+
 function loadSite() {
   return JSON.parse(fs.readFileSync(dataPath, "utf8"));
 }
@@ -167,29 +221,42 @@ function normalizeSite(input) {
       throw Object.assign(new Error(`${key} must be an array`), { statusCode: 400 });
     }
   }
+  if (
+    input.nav.length !== supportedRoutes.size ||
+    input.nav.some(item => !item || !supportedRoutes.has(item.slug) || typeof item.label !== "string") ||
+    new Set(input.nav.map(item => item.slug)).size !== supportedRoutes.size
+  ) {
+    throw Object.assign(new Error("nav must contain one labeled entry for each supported page"), { statusCode: 400 });
+  }
   if (!input.brand?.name || !input.hero?.title || !input.contact?.email) {
     throw Object.assign(new Error("brand.name, hero.title and contact.email are required"), { statusCode: 400 });
+  }
+  if (!isSafeAssetPath(input.brand.logo || "") || !isSafeAssetPath(input.hero.image || "") || input.work.some(item => !item || !isSafeAssetPath(item.image || ""))) {
+    throw Object.assign(new Error("Image paths must point to local assets"), { statusCode: 400 });
+  }
+  if (!Array.isArray(input.footer?.links) || input.footer.links.some(item => !item || typeof item.label !== "string" || !isSafeFooterHref(item.href))) {
+    throw Object.assign(new Error("Footer links must use a supported safe destination"), { statusCode: 400 });
   }
   return input;
 }
 
 function serveFile(req, res, pathname) {
-  if (
-    pathname.startsWith("/.") ||
-    pathname.startsWith("/data/") ||
-    pathname.startsWith("/skills/") ||
-    pathname === "/antislop.md" ||
-    pathname === "/AGENTS.md" ||
-    pathname === "/DESIGN.md" ||
-    pathname === "/package.json" ||
-    pathname === "/server.js"
-  ) {
+  let target;
+  let isAsset = false;
+  if (pathname === "/") {
+    target = path.join(root, "index.html");
+  } else if (pathname === "/admin") {
+    target = path.join(root, "admin.html");
+  } else if (pathname.startsWith("/assets/")) {
+    isAsset = true;
+    const filename = pathname.slice("/assets/".length);
+    if (!filename || filename.includes("/") || !/^[A-Za-z0-9._-]+$/.test(filename)) {
+      send(res, 404, "Not found");
+      return;
+    }
+    target = path.join(assetsDir, filename);
+  } else {
     send(res, 404, "Not found");
-    return;
-  }
-  const target = path.normalize(path.join(root, pathname === "/" ? "index.html" : pathname));
-  if (!target.startsWith(root)) {
-    send(res, 403, "Forbidden");
     return;
   }
   fs.stat(target, (err, stat) => {
@@ -198,10 +265,18 @@ function serveFile(req, res, pathname) {
       return;
     }
     const ext = path.extname(target).toLowerCase();
+    if (isAsset && !publicAssetExtensions.has(ext)) {
+      send(res, 404, "Not found");
+      return;
+    }
     const stream = fs.createReadStream(target);
     res.writeHead(200, {
       "Content-Type": types[ext] || "application/octet-stream",
-      "Cache-Control": target.includes(`${path.sep}assets${path.sep}`) ? "public, max-age=86400" : "no-store"
+      "Cache-Control": target.includes(`${path.sep}assets${path.sep}`) ? "public, max-age=86400" : "no-store",
+      "X-Content-Type-Options": "nosniff",
+      "X-Frame-Options": "DENY",
+      "Referrer-Policy": "strict-origin-when-cross-origin",
+      "Content-Security-Policy": "frame-ancestors 'none'; base-uri 'self'; object-src 'none'"
     });
     stream.pipe(res);
   });
@@ -339,7 +414,7 @@ async function router(req, res) {
 
     if (req.method === "GET" || req.method === "HEAD") {
       if (pathname === "/admin") {
-        serveFile(req, res, "/admin.html");
+        serveFile(req, res, "/admin");
         return;
       }
       serveFile(req, res, pathname);

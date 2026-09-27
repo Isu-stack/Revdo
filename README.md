@@ -226,6 +226,7 @@ PORT=3000
 ADMIN_USER=<admin-user>
 ADMIN_PASSWORD=<strong-password>
 SESSION_SECRET=<long-random-secret-minimum-32-characters>
+TRUSTED_PROXY_IPS=<optional-direct-proxy-peer-addresses>
 ```
 
 Generate a strong session secret:
@@ -246,7 +247,13 @@ Starts the Node.js server.
 npm run check
 ```
 
-Runs Node.js syntax validation for `server.js`.
+Checks server syntax, parses inline browser scripts, validates configured navigation routes and checks that referenced local images exist.
+
+```bash
+npm test
+```
+
+Runs isolated HTTP regression tests for static-file access, encoded traversal, admin sessions, navigation validation and login throttling.
 
 ## API Reference
 
@@ -340,26 +347,17 @@ Implemented controls:
 - `Secure` cookie flag when `NODE_ENV=production`
 - HMAC-signed session token
 - Login rate limiting by client IP
+- Forwarded client IPs are used only for explicitly trusted proxy peers
+- Login attempt and expired session records are pruned and capped
+- Static serving allowlists the public pages and direct asset filenames
+- Security headers disable MIME sniffing and framing
 - Timing-safe credential comparison
 - Production startup guard for missing `ADMIN_PASSWORD`
 - Production startup guard for missing or weak `SESSION_SECRET`
-- Static route blocking for internal project files
 - Upload type allowlist
 - Upload file signature validation
 
-Blocked from public static access:
-
-```txt
-.env
-.git/
-data/
-skills/
-antislop.md
-AGENTS.md
-DESIGN.md
-package.json
-server.js
-```
+Static routes allow only `/`, `/admin`, and safe filenames directly within `assets/`. The API exposes public site content at `/api/site`; internal files are not served through the static handler.
 
 Security limits:
 
@@ -403,6 +401,7 @@ PORT=3000
 ADMIN_USER=<admin-user>
 ADMIN_PASSWORD=<strong-password>
 SESSION_SECRET=<long-random-secret>
+TRUSTED_PROXY_IPS=<optional-direct-proxy-peer-addresses>
 ```
 
 Read before publishing:
@@ -417,6 +416,7 @@ Run:
 
 ```bash
 npm run check
+npm test
 ```
 
 Validate JSON:
@@ -634,8 +634,8 @@ Recommended next improvements:
 5. Add database-backed CMS storage.
 6. Add object storage for uploads.
 7. Add server-side rendered routes for stronger SEO.
-8. Add Playwright smoke tests.
-9. Add accessibility regression checks.
+8. Add browser-based responsive UI tests.
+9. Add automated accessibility regression checks.
 10. Add deployment pipeline.
 
 ## License

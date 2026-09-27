@@ -49,6 +49,7 @@ For small direct edits:
 git pull --rebase origin main
 # edit files
 npm run check
+npm test
 git status --short
 git add .
 git commit -m "Describe the change"
@@ -62,6 +63,7 @@ git pull --rebase origin main
 git switch -c feature/short-name
 # edit files
 npm run check
+npm test
 git add .
 git commit -m "Describe the change"
 git push -u origin feature/short-name

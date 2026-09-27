@@ -31,6 +31,7 @@ Apply antislop during project work by default. For review-only requests, use it 
 Before shipping UI or admin changes:
 
 - Run `npm run check`.
+- Run `npm test`.
 - Start the server with `npm start`.
 - Verify `/`, `/admin`, `/api/site` and admin login.
 - Check mobile navigation, keyboard navigation, form behavior and upload behavior.
