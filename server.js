@@ -10,10 +10,12 @@ const dataPath = path.join(root, "data", "site.json");
 const assetsDir = path.join(root, "assets");
 const port = Number(process.env.PORT || 3000);
 const host = process.env.HOST || "127.0.0.1";
+const isProduction = process.env.NODE_ENV === "production";
 const adminUser = process.env.ADMIN_USER || "admin";
-const adminPassword = process.env.ADMIN_PASSWORD || "admin12345";
-const sessionSecret = process.env.SESSION_SECRET || crypto.randomBytes(32).toString("hex");
+const adminPassword = process.env.ADMIN_PASSWORD || (isProduction ? "" : "admin12345");
+const sessionSecret = process.env.SESSION_SECRET || (isProduction ? "" : crypto.randomBytes(32).toString("hex"));
 const sessions = new Map();
+const loginAttempts = new Map();
 
 const types = {
   ".html": "text/html; charset=utf-8",
@@ -89,6 +91,48 @@ function getSession(req) {
   return { id, ...session };
 }
 
+function clientIp(req) {
+  const forwarded = req.headers["x-forwarded-for"];
+  if (typeof forwarded === "string" && forwarded.trim()) return forwarded.split(",")[0].trim();
+  return req.socket.remoteAddress || "unknown";
+}
+
+function isRateLimited(req) {
+  const key = clientIp(req);
+  const now = Date.now();
+  const windowMs = 10 * 60 * 1000;
+  const maxFailures = 5;
+  const entry = loginAttempts.get(key) || { count: 0, firstAt: now };
+  if (now - entry.firstAt > windowMs) {
+    loginAttempts.set(key, { count: 0, firstAt: now });
+    return false;
+  }
+  return entry.count >= maxFailures;
+}
+
+function recordLoginFailure(req) {
+  const key = clientIp(req);
+  const now = Date.now();
+  const entry = loginAttempts.get(key) || { count: 0, firstAt: now };
+  if (now - entry.firstAt > 10 * 60 * 1000) {
+    loginAttempts.set(key, { count: 1, firstAt: now });
+    return;
+  }
+  entry.count += 1;
+  loginAttempts.set(key, entry);
+}
+
+function clearLoginFailures(req) {
+  loginAttempts.delete(clientIp(req));
+}
+
+function safeEqual(a, b) {
+  const left = Buffer.from(String(a));
+  const right = Buffer.from(String(b));
+  if (left.length !== right.length) return false;
+  return crypto.timingSafeEqual(left, right);
+}
+
 function requireAuth(req, res) {
   if (getSession(req)) return true;
   json(res, 401, { error: "Unauthorized" });
@@ -130,6 +174,19 @@ function normalizeSite(input) {
 }
 
 function serveFile(req, res, pathname) {
+  if (
+    pathname.startsWith("/.") ||
+    pathname.startsWith("/data/") ||
+    pathname.startsWith("/skills/") ||
+    pathname === "/antislop.md" ||
+    pathname === "/AGENTS.md" ||
+    pathname === "/DESIGN.md" ||
+    pathname === "/package.json" ||
+    pathname === "/server.js"
+  ) {
+    send(res, 404, "Not found");
+    return;
+  }
   const target = path.normalize(path.join(root, pathname === "/" ? "index.html" : pathname));
   if (!target.startsWith(root)) {
     send(res, 403, "Forbidden");
@@ -177,9 +234,15 @@ function extensionForMime(mime) {
   return {
     "image/webp": ".webp",
     "image/png": ".png",
-    "image/jpeg": ".jpg",
-    "image/svg+xml": ".svg"
+    "image/jpeg": ".jpg"
   }[mime] || "";
+}
+
+function hasExpectedImageSignature(buffer, ext) {
+  if (ext === ".png") return buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  if (ext === ".jpg") return buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[buffer.length - 2] === 0xff && buffer[buffer.length - 1] === 0xd9;
+  if (ext === ".webp") return buffer.subarray(0, 4).toString("ascii") === "RIFF" && buffer.subarray(8, 12).toString("ascii") === "WEBP";
+  return false;
 }
 
 async function handleUpload(req, res) {
@@ -201,11 +264,15 @@ async function handleUpload(req, res) {
   const mime = contentTypeMatch?.[1]?.trim().toLowerCase();
   const ext = extensionForMime(mime);
   if (!ext) {
-    json(res, 415, { error: "Only webp, png, jpg and svg images are allowed" });
+    json(res, 415, { error: "Only webp, png and jpg images are allowed" });
     return;
   }
   if (filePart.content.length < 10) {
     json(res, 400, { error: "File is empty" });
+    return;
+  }
+  if (!hasExpectedImageSignature(filePart.content, ext)) {
+    json(res, 415, { error: "File content does not match the selected image type" });
     return;
   }
   fs.mkdirSync(assetsDir, { recursive: true });
@@ -231,12 +298,19 @@ async function router(req, res) {
     }
 
     if (req.method === "POST" && pathname === "/api/login") {
+      if (isRateLimited(req)) {
+        json(res, 429, { error: "Too many login attempts. Try again later." });
+        return;
+      }
       const payload = safeJsonParse(await readBody(req, 128 * 1024));
-      if (!payload || payload.username !== adminUser || payload.password !== adminPassword) {
+      if (!payload || !safeEqual(payload.username, adminUser) || !safeEqual(payload.password, adminPassword)) {
+        recordLoginFailure(req);
         json(res, 401, { error: "Invalid username or password" });
         return;
       }
-      const cookie = `revdo_session=${encodeURIComponent(createSession())}; HttpOnly; SameSite=Lax; Path=/; Max-Age=43200`;
+      clearLoginFailures(req);
+      const secure = isProduction ? "; Secure" : "";
+      const cookie = `revdo_session=${encodeURIComponent(createSession())}; HttpOnly; SameSite=Lax; Path=/; Max-Age=43200${secure}`;
       json(res, 200, { ok: true }, { "Set-Cookie": cookie });
       return;
     }
@@ -281,6 +355,11 @@ async function router(req, res) {
 
 fs.mkdirSync(path.dirname(dataPath), { recursive: true });
 fs.mkdirSync(assetsDir, { recursive: true });
+
+if (isProduction) {
+  if (!adminPassword) throw new Error("ADMIN_PASSWORD is required when NODE_ENV=production");
+  if (!sessionSecret || sessionSecret.length < 32) throw new Error("SESSION_SECRET must be at least 32 characters when NODE_ENV=production");
+}
 
 http.createServer(router).listen(port, host, () => {
   console.log(`Revdo running at http://${host}:${port}`);

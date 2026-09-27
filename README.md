@@ -17,6 +17,8 @@ The project is intentionally dependency-free. It runs on Node.js using the built
 - Editable SEO, brand, menu, hero, work, services, process, studio, contact and footer content
 - Image upload for logo, hero image and work images
 - Site data stored in `data/site.json`
+- Project-level antislop quality filter and skills
+- Git workflow and production checklist documentation
 - No external CDN dependency
 - No npm package dependency
 
@@ -34,6 +36,14 @@ Revdo/
 │   └── revdo-work-04.webp
 ├── data/
 │   └── site.json
+├── docs/
+│   ├── GIT_WORKFLOW.md
+│   └── PRODUCTION_CHECKLIST.md
+├── skills/
+│   └── antislop skill folders
+├── AGENTS.md
+├── DESIGN.md
+├── antislop.md
 ├── index.html
 ├── package.json
 ├── server.js
@@ -83,6 +93,7 @@ ADMIN_PASSWORD=your-strong-password
 SESSION_SECRET=your-long-random-session-secret
 PORT=3000
 HOST=127.0.0.1
+NODE_ENV=production
 ```
 
 You can copy `.env.example` as reference, but this project does not load `.env` automatically. On most hosting platforms, set those values in the hosting dashboard.
@@ -112,7 +123,6 @@ Supported upload formats:
 - WebP
 - PNG
 - JPG or JPEG
-- SVG
 
 Uploaded files are saved into:
 
@@ -121,6 +131,8 @@ assets/
 ```
 
 The admin dashboard returns the uploaded asset path and writes it into the selected field.
+
+SVG uploads are disabled intentionally because SVG can contain active content when served from the same origin.
 
 ## API Routes
 
@@ -185,9 +197,12 @@ Before deployment:
 
 - Change `ADMIN_PASSWORD`
 - Set a long random `SESSION_SECRET`
+- Set `NODE_ENV=production`
 - Serve the site over HTTPS
 - Keep `data/site.json` backed up
 - Restrict server file permissions
+
+The server blocks direct access to internal project files such as `.env`, `.git/`, `data/`, `skills/`, `server.js`, `package.json`, `AGENTS.md`, `DESIGN.md` and `antislop.md`.
 
 ## Deployment
 
@@ -211,6 +226,12 @@ SESSION_SECRET
 
 For platforms with persistent disks, keep the `data/` and `assets/` directories persistent so admin edits and uploads survive redeploys.
 
+Read the production checklist before publishing:
+
+```txt
+docs/PRODUCTION_CHECKLIST.md
+```
+
 ## Validation
 
 Run syntax check:
@@ -232,6 +253,43 @@ Then test:
 /admin
 /api/site
 ```
+
+## Git Workflow
+
+Read:
+
+```txt
+docs/GIT_WORKFLOW.md
+```
+
+Short version:
+
+```bash
+git pull --rebase origin main
+npm run check
+git add .
+git commit -m "Describe the change"
+git push origin main
+```
+
+## Antislop
+
+This repo includes antislop from:
+
+```txt
+https://github.com/miqdadbadjuber/anti-slop
+```
+
+Files added:
+
+```txt
+antislop.md
+skills/
+AGENTS.md
+DESIGN.md
+```
+
+Use it as a quality filter for UI, copy, accessibility, mobile layout and code comments. It is a filter, not a design style. Revdo's actual design direction is in `DESIGN.md`.
 
 ## License
 
