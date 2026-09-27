@@ -1,0 +1,178 @@
+{
+  "seo": {
+    "title": "Revdo Studios | Design and Software",
+    "description": "Revdo Studios is an independent design and software studio in Bandung, Indonesia. Identity, digital products, websites, custom software and technology systems built as one connected practice."
+  },
+  "brand": {
+    "name": "Revdo Studios",
+    "logo": "/assets/revdo-mark.svg"
+  },
+  "nav": [
+    {
+      "label": "Home",
+      "slug": "home"
+    },
+    {
+      "label": "Work",
+      "slug": "work"
+    },
+    {
+      "label": "Services",
+      "slug": "services"
+    },
+    {
+      "label": "Studio",
+      "slug": "studio"
+    },
+    {
+      "label": "Contact",
+      "slug": "contact"
+    }
+  ],
+  "hero": {
+    "eyebrow": "Independent design and software studio",
+    "title": "Ideas into\nworking form.",
+    "subtitle": "Identity, digital products, websites, custom software and technology systems developed as one connected practice.",
+    "image": "/assets/revdo-hero.webp",
+    "imageAlt": "Natural modern studio workspace for Revdo Studios"
+  },
+  "sections": {
+    "workIntro": "Work shaped by the problem, not a house style.",
+    "workTitle": "Selected engagements across identity, product and systems.",
+    "serviceIntro": "Identity, interface and engineering belong to the same conversation.",
+    "serviceTitle": "Strategy, design and software delivered as one connected practice.",
+    "processTitle": "Enough process to make better decisions."
+  },
+  "work": [
+    {
+      "title": "Nusantara Capital",
+      "scope": "Brand, website, system",
+      "description": "A concept identity and digital platform for a modern investment company focused on real assets in Indonesia.",
+      "image": "/assets/revdo-work-01.webp",
+      "alt": "Investment company identity and website asset"
+    },
+    {
+      "title": "Ordin",
+      "scope": "Product, interface, software",
+      "description": "A modular operations platform designed to make projects, people and workflow information readable in one place.",
+      "image": "/assets/revdo-work-02.webp",
+      "alt": "Operations dashboard product interface"
+    },
+    {
+      "title": "Teras Living",
+      "scope": "Brand, product, packaging",
+      "description": "A quiet identity and commerce direction for a contemporary home living brand built around calm materials and everyday use.",
+      "image": "/assets/revdo-work-03.webp",
+      "alt": "Home living brand product direction"
+    },
+    {
+      "title": "Karta",
+      "scope": "Web, data, system",
+      "description": "A web platform that turns spatial data into clearer visual analysis for planning and operational decisions.",
+      "image": "/assets/revdo-work-04.webp",
+      "alt": "Spatial data web platform"
+    }
+  ],
+  "services": [
+    {
+      "title": "Brand",
+      "description": "Positioning, identity, art direction and guidelines that make a brand coherent and usable."
+    },
+    {
+      "title": "Digital products",
+      "description": "Research, user experience, interface design, prototypes and design systems."
+    },
+    {
+      "title": "Web",
+      "description": "Editorial websites, product sites and digital platforms designed and built as one system."
+    },
+    {
+      "title": "Software",
+      "description": "Custom applications, internal tools, APIs, integrations and workflow automation."
+    },
+    {
+      "title": "Technology",
+      "description": "Infrastructure, cloud and applied AI only where they create a concrete operational advantage."
+    }
+  ],
+  "process": [
+    {
+      "title": "Understand",
+      "description": "Context, people, constraints and the actual problem."
+    },
+    {
+      "title": "Frame",
+      "description": "Scope, architecture, direction and measures of success."
+    },
+    {
+      "title": "Design",
+      "description": "The visual system, interface and interaction model."
+    },
+    {
+      "title": "Build",
+      "description": "Production engineering, integration, testing and documentation."
+    },
+    {
+      "title": "Refine",
+      "description": "Observe real use, maintain what matters and improve deliberately."
+    }
+  ],
+  "studio": {
+    "location": "Bandung, Indonesia",
+    "statement": "A small independent studio working across design and technology from Bandung, Indonesia.",
+    "copy": "We work directly with teams that need a clearer identity, a better digital product or software that fits the way their organization actually works.",
+    "facts": [
+      {
+        "value": "04",
+        "label": "Disciplines, one practice"
+      },
+      {
+        "value": "2026",
+        "label": "Selected engagements open"
+      },
+      {
+        "value": "ID",
+        "label": "Local and remote"
+      }
+    ],
+    "principles": [
+      {
+        "title": "Clarity before decoration",
+        "description": "Visual decisions should make the idea easier to understand."
+      },
+      {
+        "title": "Systems before one offs",
+        "description": "Rules and components should remain useful after launch."
+      },
+      {
+        "title": "Technology with a reason",
+        "description": "Tools matter when they improve the outcome."
+      }
+    ]
+  },
+  "contact": {
+    "title": "Have something worth making?",
+    "copy": "Tell us what needs to change, what you want to build and why it matters.",
+    "email": "hello@revdo.studio"
+  },
+  "footer": {
+    "indexLabel": "Index 2026",
+    "description": "Design and software studio. Bandung, Indonesia. Ideas into working form for organizations that care about clarity, usefulness and craft.",
+    "copyright": "© 2026 Revdo Studios",
+    "timezone": "Bandung UTC+7",
+    "links": [
+      {
+        "label": "Email",
+        "href": "mailto:hello@revdo.studio"
+      },
+      {
+        "label": "Instagram",
+        "href": "#"
+      },
+      {
+        "label": "Are.na",
+        "href": "#"
+      }
+    ]
+  }
+}
